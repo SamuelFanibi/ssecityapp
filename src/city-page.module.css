@@ -1,0 +1,26 @@
+
+.app {
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  .column {
+    flex: 1;
+    padding: 20px;
+  }
+  
+  .citytablecontainer {
+    overflow-y: auto;
+    max-height: 400px;
+  }
+  .citydetailscol {
+    display: inline-flex;
+    font-weight: bold;
+    padding: 10px;
+  }
+  
+  .citydetailrow {
+    width: 100%;
+  }
+  
+ 

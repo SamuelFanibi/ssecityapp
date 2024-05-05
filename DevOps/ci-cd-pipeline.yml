@@ -1,0 +1,103 @@
+trigger:
+  - master
+
+variables:
+    resourceGroupName: 'ssecityapp-rg'
+    location: 'uksouth'
+    webAppName: 'ssecityapp'
+    templateFile: 'sse-webapp.bicep'
+
+pool:
+  vmImage: 'ubuntu-latest'
+stages:
+  - stage: Build
+    displayName: Build the web application
+    jobs:
+      - job: Build
+        displayName: Build job
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 21.x
+            displayName: Install Node.js
+          - script: |
+              npm install
+              npm run build
+             
+            displayName: npm install and build
+        
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathtoPublish: dist
+              artifactName: totalServe-vite-webapp
+      - job: Bicep
+        displayName: Copy the infra
+        pool:
+          vmImage: 'windows-latest'
+        steps: 
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: 'DevOps/sse-webapp.bicep'
+              ArtifactName: 'bicep'
+              
+  - stage: Deployment
+    displayName: Deploy the web application
+    jobs:
+      - job: AzureResourceGroup
+        pool:
+          vmImage: 'windows-latest'
+        displayName: Deploy Azure Resource group
+        steps:
+        - task: DownloadBuildArtifacts@1
+          inputs:
+            buildType: 'current'
+            downloadType: 'single'
+            artifactName: 'bicep'
+            downloadPath: '$(Build.ArtifactStagingDirectory)'
+        
+        - task: AzureCLI@2
+          displayName: Preview Resource Group Bicep Changes
+          inputs:
+            azureSubscription: 'SamFancy'
+            scriptType: 'batch'
+            scriptLocation: 'inlineScript'
+            inlineScript:  az group create --name $(resourceGroupName) --location $(location)
+            workingDirectory: '$(Build.ArtifactStagingDirectory)/bicep'
+        - task: AzureCLI@2
+          displayName: Preview Resource Group Bicep Changes
+          inputs:
+            azureSubscription: 'SamFancy'
+            scriptType: 'batch'
+            scriptLocation: 'inlineScript'
+            inlineScript:  az deployment group what-if --resource-group $(resourceGroupName) --template-file sse-webapp.bicep --parameters webAppName=$(webAppName)
+            workingDirectory: '$(Build.ArtifactStagingDirectory)/bicep'
+
+        - task: AzureCLI@2
+          displayName: Deploy Bicep To Azure
+          inputs:
+            azureSubscription: 'SamFancy'
+            scriptType: 'batch'
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az deployment group create --resource-group $(resourceGroupName) --template-file sse-webapp.bicep --parameters webAppName=$(webAppName)'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)/bicep'
+      - job: Deployment
+        dependsOn: AzureResourceGroup
+        pool:
+          vmImage: 'windows-latest'
+        displayName: Deploy job
+        steps:
+        - task: DownloadBuildArtifacts@1
+          inputs:
+            buildType: 'current'
+            downloadType: 'single'
+            artifactName: totalServe-vite-webapp
+            downloadPath: '$(Build.ArtifactStagingDirectory)'
+       
+        - task: AzureRmWebAppDeployment@4
+          displayName: AzureDeployment
+          inputs:
+            ConnectionType: 'AzureRM'
+            azureSubscription: 'SamFancy'
+            appType: 'webApp'
+            WebAppName: 'wapp-$(webAppName)'
+            packageForLinux: '$(Build.ArtifactStagingDirectory)/totalServe-vite-webapp'
